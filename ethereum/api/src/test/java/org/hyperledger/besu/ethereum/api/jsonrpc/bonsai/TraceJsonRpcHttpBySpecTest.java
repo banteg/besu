@@ -14,9 +14,19 @@
  */
 package org.hyperledger.besu.ethereum.api.jsonrpc.bonsai;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.hyperledger.besu.ethereum.api.jsonrpc.AbstractJsonRpcHttpBySpecTest;
 import org.hyperledger.besu.ethereum.core.BlockchainSetupUtil;
 import org.hyperledger.besu.plugin.services.storage.DataStorageFormat;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 public class TraceJsonRpcHttpBySpecTest extends AbstractJsonRpcHttpBySpecTest {
 
@@ -30,6 +40,47 @@ public class TraceJsonRpcHttpBySpecTest extends AbstractJsonRpcHttpBySpecTest {
   protected BlockchainSetupUtil getBlockchainSetupUtil(final DataStorageFormat storageFormat) {
     return createBlockchainSetupUtil(
         "trace/chain-data/genesis.json", "trace/chain-data/blocks.bin", storageFormat);
+  }
+
+  @ParameterizedTest
+  @CsvSource({"53086, false", "53089, true"})
+  void rootOpcodeReportsEffectsOnlyWithSufficientGas(final long gas, final boolean succeeds)
+      throws Exception {
+    // Istanbul creation costs 53,080 intrinsic gas. Two PUSHes cost six more;
+    // ADD needs another three, so only the second case can execute it.
+    final JsonNode result = traceVm("6001600201", gas);
+    final JsonNode ops = result.get("vmTrace").get("ops");
+    final JsonNode add = ops.get(ops.size() - 1);
+    assertThat(add.get("pc").asInt()).isEqualTo(4);
+    if (succeeds) {
+      assertThat(result.get("trace").get(0).has("error")).isFalse();
+      assertThat(add.get("ex").get("push").get(0).asText()).isEqualTo("0x3");
+      assertThat(add.get("ex").get("used").asLong()).isZero();
+    } else {
+      assertThat(result.get("trace").get(0).get("error").asText()).isEqualTo("Out of gas");
+      assertThat(add.get("ex").isNull()).isTrue();
+    }
+  }
+
+  private JsonNode traceVm(final String code, final long gas) throws Exception {
+    final String request =
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"trace_call\",\"params\":[{"
+            + "\"from\":\"0x627306090abab3a6e1400e9345bc60c78a8bef57\",\"gas\":\"0x"
+            + Long.toHexString(gas)
+            + "\",\"data\":\"0x"
+            + code
+            + "\"},[\"vmTrace\",\"trace\"],\"latest\"]}";
+    try (Response response =
+        client
+            .newCall(
+                new Request.Builder().url(baseUrl).post(RequestBody.create(request, JSON)).build())
+            .execute()) {
+      assertThat(response.code()).isEqualTo(200);
+      final JsonNode body = new ObjectMapper().readTree(response.body().string());
+      assertThat(body.has("error")).isFalse();
+      assertThat(body.has("result")).isTrue();
+      return body.get("result");
+    }
   }
 
   public static Object[][] specs() {
