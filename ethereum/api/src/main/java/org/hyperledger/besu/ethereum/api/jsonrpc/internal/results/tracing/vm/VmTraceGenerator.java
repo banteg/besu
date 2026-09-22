@@ -117,8 +117,7 @@ public class VmTraceGenerator {
       final TraceFrame frame, final VmOperation op, final VmOperationExecutionReport report) {
     // add the operation representation to the list of traces
     final Optional<ExceptionalHaltReason> exceptionalHaltReason = frame.getExceptionalHaltReason();
-    if (frame.getDepth() > 0
-        && exceptionalHaltReason.isPresent()
+    if (exceptionalHaltReason.isPresent()
         && exceptionalHaltReason.get() == ExceptionalHaltReason.INSUFFICIENT_GAS) {
       op.setVmOperationExecutionReport(null);
     } else {
