@@ -162,6 +162,7 @@ public class DebugOperationTracer extends AbstractDebugOperationTracer {
           TraceFrame.builder()
               .setPc(frame.getPC())
               .setOpcodeNumber(Integer.MAX_VALUE)
+              .setExceptionalHaltReason(frame.getExceptionalHaltReason())
               .setGasRemaining(frame.getRemainingGas())
               .setGasRefund(frame.getGasRefund())
               .setDepth(frame.getDepth())
