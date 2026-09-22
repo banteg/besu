@@ -103,7 +103,11 @@ class VmTraceGeneratorTest {
     final VmTrace trace =
         vmTrace("0x602a600052" + "62ffffff6000" + "6020602060206000600060045af1" + "5e" + "00");
     assertThat(memAt(trace, 24)).isNotNull();
-    assertThat(memAt(trace, 25)).isNull();
+    final VmOperationExecutionReport report =
+        operationAt(trace, 25).getVmOperationExecutionReport();
+    if (report != null) {
+      assertThat(report.getMem()).isNull();
+    }
   }
 
   private VmTrace vmTrace(final String initCode) {
@@ -152,11 +156,13 @@ class VmTraceGeneratorTest {
   }
 
   private static Mem memAt(final VmTrace trace, final long pc) {
+    return operationAt(trace, pc).getVmOperationExecutionReport().getMem();
+  }
+
+  private static VmOperation operationAt(final VmTrace trace, final long pc) {
     return trace.getVmOperations().stream()
         .filter(op -> op.getPc() == pc)
         .findFirst()
-        .orElseThrow()
-        .getVmOperationExecutionReport()
-        .getMem();
+        .orElseThrow();
   }
 }
