@@ -96,8 +96,13 @@ public class VmTraceGenerator {
       generateTracingStorage(report);
       handleDepthIncreased(op, report, nextTraceFrame);
       completeStep(frame, op, report);
+    }
+    // Virtual frames do not open a VM subtrace; omitted real opcodes still change depth.
+    if (!frame.isVirtualOperation()) {
       lastDepth = frame.getDepth();
     }
+    // Call resumption lookup indexes raw frames, including omitted operations.
+    currentIndex++;
   }
 
   private boolean mustIgnore(final TraceFrame frame) {
@@ -127,7 +132,6 @@ public class VmTraceGenerator {
     if (currentTrace != null) {
       currentTrace.add(op);
     }
-    currentIndex++;
   }
 
   private void handleDepthIncreased(
