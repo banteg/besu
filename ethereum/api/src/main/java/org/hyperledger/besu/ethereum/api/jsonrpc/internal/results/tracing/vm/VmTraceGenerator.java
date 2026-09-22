@@ -174,6 +174,11 @@ public class VmTraceGenerator {
           if (nextTraceFrame.map(TraceFrame::getDepth).orElse(0) > currentTraceFrame.getDepth()) {
             op.setCost(currentTraceFrame.getGasRemainingPostExecution() + op.getCost());
             final VmTrace newSubTrace = new VmTrace();
+            // The child's first opcode may be omitted from the operation list.
+            nextTraceFrame
+                .flatMap(TraceFrame::getMaybeCode)
+                .map(code -> code.getBytes().toHexString())
+                .ifPresent(newSubTrace::setCode);
             parentTraces.addLast(newSubTrace);
             op.setSub(newSubTrace);
           } else if (currentTraceFrame.getDepth() == 0) {

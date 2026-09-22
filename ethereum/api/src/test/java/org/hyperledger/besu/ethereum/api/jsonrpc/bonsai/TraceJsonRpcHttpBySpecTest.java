@@ -57,7 +57,12 @@ public class TraceJsonRpcHttpBySpecTest extends AbstractJsonRpcHttpBySpecTest {
     for (int i = 0; i < expectedPcs.length; i++) {
       assertThat(ops.get(i).get("pc").asInt()).isEqualTo(expectedPcs[i]);
     }
-    assertThat(ops.get(6).get("sub").get("ops").isEmpty()).isTrue();
+    final JsonNode child = ops.get(6).get("sub");
+    assertThat(child.get("ops").isEmpty()).isTrue();
+    final JsonNode root = traceVm(childOpcode, 1_000_000).get("vmTrace");
+    assertThat(root.get("ops").isEmpty()).isTrue();
+    assertThat(root.get("code").asText()).isEqualTo("0x" + childOpcode);
+    assertThat(child.get("code").asText()).isEqualTo(root.get("code").asText());
   }
 
   @Test
