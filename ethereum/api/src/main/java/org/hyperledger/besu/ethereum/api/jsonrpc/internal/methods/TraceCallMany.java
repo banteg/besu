@@ -176,7 +176,7 @@ public class TraceCallMany extends TraceCall implements JsonRpcMethod {
         transactionSimulator.processWithWorldUpdater(
             callParameter,
             Optional.empty(),
-            buildTransactionValidationParams(),
+            buildTransactionValidationParams(header, callParameter),
             tracer,
             header,
             worldUpdater,
