@@ -27,6 +27,7 @@
 - DiscV5 discovery now throttles to `--Xv5-discovery-interval-seconds` (default 30s) once connected peers reach `--Xv5-minimum-peer-ratio` of `--max-peers`, instead of stopping peer search entirely. Below that ratio it runs at `--Xv5-fast-discovery-interval-seconds` (default 1s). [#11344](https://github.com/besu-eth/besu/pull/11344)
 - Backward sync no longer retries a block every few milliseconds when its parent world state is unavailable. The forward sync step swallowed the error meant to stop backward sync, so the same block was fetched, validated and logged in a tight loop. The `Backward sync halted` warning is now also logged only once per block. [#11303](https://github.com/besu-eth/besu/pull/11303)
 - JSON-RPC response streaming no longer parks a Vert.x worker thread for the full backpressure timeout after the client has gone away, so a client that stops reading a large response can no longer starve the worker pool that also serves the Engine API. [#11146](https://github.com/besu-eth/besu/pull/11146)
+- `trace_callMany` now answers a bundle with an invalid call with a JSON-RPC error. Previously it returned the complete error response (`{"jsonrpc":"2.0","id":1,"error":{...}}`) as the `result` of a successful response. An unavailable world state now returns `World state unavailable` instead of a `null` result. [#11401](https://github.com/besu-eth/besu/pull/11401)
 
 ### Additions and Improvements
 - Update `Bouncycastle` to 1.85 to address CVEs `CVE-2026-8763` and `CVE-2026-13506`. [#11336](https://github.com/besu-eth/besu/pull/11336)
