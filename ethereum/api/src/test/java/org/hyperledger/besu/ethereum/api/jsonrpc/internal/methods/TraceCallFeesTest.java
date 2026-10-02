@@ -40,12 +40,14 @@ import java.math.BigInteger;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /**
@@ -64,6 +66,11 @@ public class TraceCallFeesTest {
   // init code returning BASEFEE and GASPRICE: BASEFEE PUSH0 MSTORE GASPRICE PUSH1 0x20 MSTORE
   // PUSH1 0x40 PUSH0 RETURN
   private static final String INIT_CODE = "0x485f523a60205260405ff3";
+  // returns BLOBBASEFEE: BLOBBASEFEE PUSH0 MSTORE PUSH1 0x20 PUSH0 RETURN
+  private static final String BLOB_BASE_FEE_READER = "0x00000000000000000000000000000000000b10b0";
+  private static final String BLOB_BASE_FEE_READER_CODE = "0x4a5f5260205ff3";
+  private static final String BLOB_HASH =
+      "0x015a4cab4911426699ed34483de6640cf55a568afc5c5edffdcbd8bcd4452f68";
 
   private final ObjectMapper mapper = new ObjectMapper().registerModule(new Jdk8Module());
 
@@ -73,9 +80,15 @@ public class TraceCallFeesTest {
   private TraceCallMany traceCallMany;
 
   @BeforeEach
-  public void setUp() {
+  public void setUp() throws Exception {
+    final ObjectNode genesis =
+        (ObjectNode) mapper.readTree(TraceCallFeesTest.class.getResource(GENESIS_RESOURCE));
+    ((ObjectNode) genesis.get("alloc"))
+        .putObject(BLOB_BASE_FEE_READER)
+        .put("code", BLOB_BASE_FEE_READER_CODE)
+        .put("balance", "0x0");
     final ExecutionContextTestFixture fixture =
-        ExecutionContextTestFixture.builder(GenesisConfig.fromResource(GENESIS_RESOURCE))
+        ExecutionContextTestFixture.builder(GenesisConfig.fromConfig(genesis))
             .dataStorageFormat(DataStorageFormat.BONSAI)
             .build();
     final BlockchainQueries blockchainQueries =
@@ -230,6 +243,62 @@ public class TraceCallFeesTest {
         error(traceCallMany, "trace_callMany", "[" + valid + "," + invalid + "],\"" + BLOCK + "\"");
     assertThat(manyError.getCode()).isEqualTo(traceError.getCode());
     assertThat(manyError.getMessage()).isEqualTo(traceError.getMessage());
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      value = {
+        // a blob call without a positive maxFeePerBlobGas runs with BLOBBASEFEE 0 and pays no
+        // blob fee
+        "'\"blobVersionedHashes\":[\"" + BLOB_HASH + "\"],' | 0 | 0",
+        "'\"blobVersionedHashes\":[\"" + BLOB_HASH + "\"],\"maxFeePerBlobGas\":\"0x0\",' | 0 | 0",
+        // whether or not its execution is priced: it pays the base fee for the 21,015 gas it uses
+        "'\"blobVersionedHashes\":[\"" + BLOB_HASH + "\"],\"maxFeePerGas\":\"0x10\",' | 0 | 147105",
+        // a positive maxFeePerBlobGas is validated against the block's blob base fee and pays the
+        // blob fee for its one blob
+        "'\"blobVersionedHashes\":[\""
+            + BLOB_HASH
+            + "\"],\"maxFeePerBlobGas\":\"0x1\",' | 1 | 131072",
+        // an unpriced call without blobs sees a blob base fee of 1
+        "'' | 1 | 0"
+      })
+  public void blobCallIsPricedOnItsOwnLikeEthCall(
+      final String fields, final long blobBaseFee, final long senderDebit) throws Exception {
+    final String call =
+        "{\"from\":\""
+            + SENDER
+            + "\",\"to\":\""
+            + BLOB_BASE_FEE_READER
+            + "\","
+            + fields
+            + "\"gas\":\"0x10000\"}";
+
+    final String ethOutput = (String) success(ethCall, "eth_call", call + ",\"" + BLOCK + "\"");
+    assertThat(ethOutput).isEqualTo(Bytes32.leftPad(Bytes.minimalBytes(blobBaseFee)).toHexString());
+
+    final String types = "[\"trace\",\"stateDiff\"]";
+    final JsonNode trace =
+        traceResult(success(traceCall, "trace_call", call + "," + types + ",\"" + BLOCK + "\""));
+    assertThat(trace.get("output").asText()).isEqualTo(ethOutput);
+    assertThat(senderDebit(trace)).isEqualTo(BigInteger.valueOf(senderDebit));
+
+    final JsonNode many =
+        traceResult(
+            success(
+                traceCallMany,
+                "trace_callMany",
+                "[[" + call + "," + types + "]],\"" + BLOCK + "\""));
+    assertThat(many.get(0).get("output").asText()).isEqualTo(ethOutput);
+    assertThat(senderDebit(many.get(0))).isEqualTo(BigInteger.valueOf(senderDebit));
+  }
+
+  private static BigInteger senderDebit(final JsonNode result) {
+    final JsonNode balance = senderDiff(result).get("balance");
+    if (balance.isTextual()) {
+      return BigInteger.ZERO;
+    }
+    return quantity(balance.get("*").get("from")).subtract(quantity(balance.get("*").get("to")));
   }
 
   // the gas the call uses when simulated on its own

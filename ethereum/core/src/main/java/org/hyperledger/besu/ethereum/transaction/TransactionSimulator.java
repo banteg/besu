@@ -374,12 +374,19 @@ public class TransactionSimulator {
         simulationTransactionProcessorFactory.getTransactionProcessor(
             processableHeader, maybeStateOverrides);
 
+    // The blob fee is decided independently of the execution fee: a blob call without a positive
+    // maxFeePerBlobGas runs with a blob base fee of 0 and pays no blob fee, as in Geth's eth_call,
+    // and a positive maxFeePerBlobGas is priced at the block's blob base fee.
     BiFunction<ProtocolSpec, Optional<BlockHeader>, Wei> blobGasPricePerGasSupplier =
         (protocolSpec, maybeParentHeader) -> {
+          if (isUnpricedBlobCall(callParams)) {
+            return Wei.ZERO;
+          }
           if (transactionValidationParams.isAllowExceedingBalance()
-              && !transactionValidationParams.isPreserveCallerGasPricing()) {
-            // Returning zero is spec-illegal even in no-fee simulation paths where baseFee
-            // is zeroed for caller convenience.
+              && !transactionValidationParams.isPreserveCallerGasPricing()
+              && callParams.getMaxFeePerBlobGas().isEmpty()) {
+            // An unpriced call without blob fields never sees a blob base fee of 0, which is
+            // spec-illegal for an ordinary call.
             return MIN_BLOB_GASPRICE;
           }
           return protocolSpec
@@ -602,9 +609,9 @@ public class TransactionSimulator {
       gasPrice = Wei.ZERO;
       maxFeePerGas = Wei.ZERO;
       maxPriorityFeePerGas = Wei.ZERO;
-      // Must match blobGasPrice (MIN_BLOB_GASPRICE) so the fee-cap check passes; see
-      // blobGasPricePerGasSupplier above.
-      maxFeePerBlobGas = MIN_BLOB_GASPRICE;
+      // the blob fee is priced on its own: a positive cap is validated and charged, and an
+      // omitted cap is 0 for an unpriced blob call, whose blobGasPrice is 0
+      maxFeePerBlobGas = callParams.getMaxFeePerBlobGas().orElse(blobGasPrice);
     } else {
       if (noPricingParametersPresent) {
         // in case there are no gas price parameters,
@@ -723,6 +730,19 @@ public class TransactionSimulator {
     return callParams.getMaxPriorityFeePerGas().isEmpty()
         && callParams.getMaxFeePerGas().isEmpty()
         && callParams.getGasPrice().isEmpty();
+  }
+
+  /**
+   * A blob call, one that carries blob versioned hashes or a max fee per blob gas, is unpriced when
+   * its max fee per blob gas is omitted or zero. It runs with a blob base fee of 0 and pays no blob
+   * fee. A {@code strict} call is validated as a transaction and keeps the block's blob base fee.
+   */
+  private static boolean isUnpricedBlobCall(final CallParameter callParams) {
+    return !callParams.getStrict().orElse(false)
+        && callParams
+            .getMaxFeePerBlobGas()
+            .map(Wei::isZero)
+            .orElseGet(() -> callParams.getBlobVersionedHashes().isPresent());
   }
 
   private boolean shouldSetBlobGasPrice(final CallParameter callParams) {

@@ -66,12 +66,8 @@ public class CallParameterUtil {
 
     final boolean isZeroGasPrice = callParams.getGasPrice().map(Wei.ZERO::equals).orElse(true);
 
+    // the blob fee is priced independently, by the simulator
     if (header.getBaseFee().isPresent()) {
-      if (callParams.getBlobVersionedHashes().isPresent()
-          && (callParams.getMaxFeePerBlobGas().isEmpty()
-              || callParams.getMaxFeePerBlobGas().get().equals(Wei.ZERO))) {
-        return true;
-      }
       final boolean isZeroMaxFeePerGas =
           callParams.getMaxFeePerGas().orElse(Wei.ZERO).equals(Wei.ZERO);
       final boolean isZeroMaxPriorityFeePerGas =

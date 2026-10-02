@@ -26,8 +26,11 @@ import org.hyperledger.besu.ethereum.transaction.ImmutableCallParameter;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.UnaryOperator;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 class CallParameterUtilTest {
 
@@ -46,39 +49,34 @@ class CallParameterUtilTest {
     assertThat(isAllowExceedingBalance(params -> params.maxPriorityFeePerGas(Wei.ONE))).isFalse();
   }
 
-  @Test
-  void allowsExceedingBalanceWhenBlobTxHasZeroMaxFeePerBlobGas() {
+  @ParameterizedTest
+  @MethodSource("blobFeeCaps")
+  void allowsExceedingBalanceWhenBlobTxHasNoExecutionFees(final Optional<Wei> maxFeePerBlobGas) {
     assertThat(
             isAllowExceedingBalance(
                 params ->
                     params
                         .blobVersionedHashes(List.of(VersionedHash.DEFAULT_VERSIONED_HASH))
-                        .maxFeePerBlobGas(Wei.ZERO)
-                        .maxFeePerGas(Wei.ONE)))
+                        .maxFeePerBlobGas(maxFeePerBlobGas)))
         .isTrue();
   }
 
-  @Test
-  void allowsExceedingBalanceWhenBlobTxOmitsMaxFeePerBlobGas() {
+  // the blob fee is priced on its own and doesn't make the execution fees unpriced
+  @ParameterizedTest
+  @MethodSource("blobFeeCaps")
+  void checksBalanceWhenBlobTxHasExecutionFees(final Optional<Wei> maxFeePerBlobGas) {
     assertThat(
             isAllowExceedingBalance(
                 params ->
                     params
                         .blobVersionedHashes(List.of(VersionedHash.DEFAULT_VERSIONED_HASH))
-                        .maxFeePerGas(Wei.ONE)))
-        .isTrue();
-  }
-
-  @Test
-  void checksBalanceWhenBlobTxHasNonZeroMaxFeePerBlobGas() {
-    assertThat(
-            isAllowExceedingBalance(
-                params ->
-                    params
-                        .blobVersionedHashes(List.of(VersionedHash.DEFAULT_VERSIONED_HASH))
-                        .maxFeePerBlobGas(Wei.ONE)
+                        .maxFeePerBlobGas(maxFeePerBlobGas)
                         .maxFeePerGas(Wei.ONE)))
         .isFalse();
+  }
+
+  static Stream<Optional<Wei>> blobFeeCaps() {
+    return Stream.of(Optional.empty(), Optional.of(Wei.ZERO), Optional.of(Wei.ONE));
   }
 
   @Test
