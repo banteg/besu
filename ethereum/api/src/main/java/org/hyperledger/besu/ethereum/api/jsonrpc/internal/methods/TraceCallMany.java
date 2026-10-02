@@ -139,7 +139,7 @@ public class TraceCallMany extends TraceCall implements JsonRpcMethod {
                           final WorldUpdater localUpdater = updater.updater();
                           traceCallResults.add(
                               getSingleCallResult(
-                                  param.getTuple().getCallParameter(),
+                                  withoutNonce(param.getTuple().getCallParameter()),
                                   param.getTuple().getTraceTypeParameter(),
                                   blockHeader,
                                   localUpdater));

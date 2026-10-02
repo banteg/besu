@@ -301,6 +301,51 @@ public class TraceCallFeesTest {
     return quantity(balance.get("*").get("from")).subtract(quantity(balance.get("*").get("to")));
   }
 
+  @Test
+  public void suppliedNonceIsNeitherValidatedNorUsed() throws Exception {
+    final String types = "[\"trace\",\"stateDiff\"]";
+
+    // the sender's nonce is 0: a higher nonce is accepted, and the creation runs at nonce 0
+    final JsonNode trace =
+        traceResult(
+            success(
+                traceCall,
+                "trace_call",
+                call("\"nonce\":\"0x5\",") + "," + types + ",\"" + BLOCK + "\""));
+    assertThat(createdAddress(trace)).isEqualTo(contractAddress(0));
+
+    // after the first call the sender's nonce is 1: a lower nonce is accepted too, and the creation
+    // runs at nonce 1
+    final JsonNode results =
+        mapper.valueToTree(
+            success(
+                traceCallMany,
+                "trace_callMany",
+                "[["
+                    + call("")
+                    + ","
+                    + types
+                    + "],["
+                    + call("\"nonce\":\"0x0\",")
+                    + ","
+                    + types
+                    + "]],\""
+                    + BLOCK
+                    + "\""));
+    assertThat(createdAddress(results.get(1))).isEqualTo(contractAddress(1));
+    final JsonNode nonce = senderDiff(results.get(1)).get("nonce").get("*");
+    assertThat(nonce.get("from").asText()).isEqualTo("0x1");
+    assertThat(nonce.get("to").asText()).isEqualTo("0x2");
+  }
+
+  private static String createdAddress(final JsonNode result) {
+    return result.get("trace").get(0).get("result").get("address").asText();
+  }
+
+  private static String contractAddress(final long nonce) {
+    return Address.contractAddress(Address.fromHexString(SENDER), nonce).toHexString();
+  }
+
   // the gas the call uses when simulated on its own
   private long pricedGasUsed(final long gasPrice) {
     return transactionSimulator
