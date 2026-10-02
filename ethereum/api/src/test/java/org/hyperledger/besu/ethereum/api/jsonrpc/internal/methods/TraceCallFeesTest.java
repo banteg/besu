@@ -179,6 +179,32 @@ public class TraceCallFeesTest {
         .isEqualTo(gasUsed.multiply(BigInteger.valueOf(0x10 - BASE_FEE)));
   }
 
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        // below the base fee
+        "\"gasPrice\":\"0x1\",",
+        // intrinsic gas above an explicit gas of 0
+        "\"gasPrice\":\"0x0\",\"gas\":\"0x0\",",
+        // more than the sender can pay for the gas
+        "\"gasPrice\":\"0x10000000000000000000\","
+      })
+  public void callManyRejectsAnInvalidCallWithItsOwnReasonLikeTraceCall(final String fees)
+      throws Exception {
+    final String types = "[\"trace\"]";
+    final String valid = "[" + call("\"gasPrice\":\"0x0\",") + "," + types + "]";
+    final String invalid = "[" + call(fees) + "," + types + "]";
+
+    final JsonRpcError traceError =
+        error(traceCall, "trace_call", call(fees) + "," + types + ",\"" + BLOCK + "\"");
+    assertThat(traceError.getCode()).isNotEqualTo(RpcErrorType.INTERNAL_ERROR.getCode());
+
+    final JsonRpcError manyError =
+        error(traceCallMany, "trace_callMany", "[" + valid + "," + invalid + "],\"" + BLOCK + "\"");
+    assertThat(manyError.getCode()).isEqualTo(traceError.getCode());
+    assertThat(manyError.getMessage()).isEqualTo(traceError.getMessage());
+  }
+
   // the gas the call uses when simulated on its own
   private long pricedGasUsed(final long gasPrice) {
     return transactionSimulator

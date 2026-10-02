@@ -27,13 +27,16 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.JsonRpcPara
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.TraceCallManyParameter;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.TraceTypeParameter;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.TransactionTrace;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcError;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.core.Block;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
+import org.hyperledger.besu.ethereum.mainnet.ValidationResult;
 import org.hyperledger.besu.ethereum.transaction.CallParameter;
+import org.hyperledger.besu.ethereum.transaction.TransactionInvalidReason;
 import org.hyperledger.besu.ethereum.transaction.TransactionSimulator;
 import org.hyperledger.besu.ethereum.transaction.TransactionSimulatorResult;
 import org.hyperledger.besu.ethereum.vm.DebugOperationTracer;
@@ -143,9 +146,10 @@ public class TraceCallMany extends TraceCall implements JsonRpcMethod {
                           localUpdater.commit();
                         });
               } catch (final TransactionInvalidException e) {
-                LOG.error("Invalid transaction simulator result");
                 return Optional.of(
-                    new JsonRpcErrorResponse(requestContext.getRequest().getId(), INTERNAL_ERROR));
+                    new JsonRpcErrorResponse(
+                        requestContext.getRequest().getId(),
+                        JsonRpcError.from(e.validationResult)));
               } catch (final EmptySimulatorResultException e) {
                 LOG.error("Empty simulator result, blockHeader: {}", blockHeader);
                 return Optional.of(
@@ -193,7 +197,7 @@ public class TraceCallMany extends TraceCall implements JsonRpcMethod {
     }
     final TransactionSimulatorResult simulatorResult = maybeSimulatorResult.get();
     if (simulatorResult.isInvalid()) {
-      throw new TransactionInvalidException();
+      throw new TransactionInvalidException(simulatorResult.getValidationResult());
     }
 
     final TransactionTrace transactionTrace =
@@ -207,8 +211,11 @@ public class TraceCallMany extends TraceCall implements JsonRpcMethod {
   }
 
   private static class TransactionInvalidException extends RuntimeException {
-    TransactionInvalidException() {
+    private final ValidationResult<TransactionInvalidReason> validationResult;
+
+    TransactionInvalidException(final ValidationResult<TransactionInvalidReason> validationResult) {
       super();
+      this.validationResult = validationResult;
     }
   }
 

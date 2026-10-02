@@ -100,7 +100,8 @@ public class TraceCallManyTest {
             any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(Optional.of(invalid));
 
-    assertError(request(CALL + "," + CALL), RpcErrorType.INTERNAL_ERROR);
+    // the error names the call's own violation
+    assertError(request(CALL + "," + CALL), RpcErrorType.GAS_PRICE_BELOW_CURRENT_BASE_FEE);
     // the bundle stops at the first invalid call
     verify(transactionSimulator, times(1))
         .processWithWorldUpdater(any(), any(), any(), any(), any(), any(), any(), any());
