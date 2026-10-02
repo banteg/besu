@@ -138,6 +138,33 @@ public class TraceCallFeesTest {
     assertThat(traceError.getMessage()).isEqualTo(ethError.getMessage());
   }
 
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "\"maxPriorityFeePerGas\":\"0x1\",",
+        "\"maxPriorityFeePerGas\":\"0x1\",\"maxFeePerGas\":\"0x0\","
+      })
+  public void tipAboveFeeCapIsRejectedBeforeBaseFeeLikeEthCall(final String fees) throws Exception {
+    final String call = call(fees);
+
+    // the fee cap is also below the base fee, but the tip above the cap is reported
+    final JsonRpcError ethError = error(ethCall, "eth_call", call + ",\"" + BLOCK + "\"");
+    assertThat(ethError.getCode())
+        .isEqualTo(RpcErrorType.MAX_PRIORITY_FEE_PER_GAS_EXCEEDS_MAX_FEE_PER_GAS.getCode());
+    assertThat(ethError.getMessage())
+        .startsWith(RpcErrorType.MAX_PRIORITY_FEE_PER_GAS_EXCEEDS_MAX_FEE_PER_GAS.getMessage());
+
+    final JsonRpcError traceError =
+        error(traceCall, "trace_call", call + ",[\"trace\"],\"" + BLOCK + "\"");
+    assertThat(traceError.getCode()).isEqualTo(ethError.getCode());
+    assertThat(traceError.getMessage()).isEqualTo(ethError.getMessage());
+
+    final JsonRpcError manyError =
+        error(traceCallMany, "trace_callMany", "[[" + call + ",[\"trace\"]]],\"" + BLOCK + "\"");
+    assertThat(manyError.getCode()).isEqualTo(ethError.getCode());
+    assertThat(manyError.getMessage()).isEqualTo(ethError.getMessage());
+  }
+
   @Test
   public void callManyAppliesEachCallsOwnPricingAndCarriesStateForward() throws Exception {
     final String types = "[\"trace\",\"stateDiff\"]";
