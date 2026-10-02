@@ -26,6 +26,8 @@
 - `--rpc-tx-feecap` will treat a value of 0 as limiting fees to 0. Today it treats 0 as "do not cap fees". To achieve similar behaviour set it to a suitably large value to effectively prevent any fee capping.
 
 ### Bug fixes
+- A contract created from within a system call now gets its initial nonce and deployed code. `SystemCallProcessor` ran every frame with the message-call processor, so a `CREATE` in a system call's code, reachable when a system contract's code is replaced on a custom or test chain, left the new account with nonce 0 and ran its initcode without deploying anything.
+- Block access lists now record the net change of the withdrawals and the system calls that share the post-execution index, measured from the state at the start of that index, and include writes made in a system call's own frame. When replaced system contract code changed a value across calls, or changed it twice, each call was diffed against the one before it, giving extra or duplicate entries.
 - `BlobCache.restoreBlob` now reports that a blob transaction cannot be restored instead of throwing `NullPointerException` when any of its blobs is no longer cached.
 - DiscV5 discovery now throttles to `--Xv5-discovery-interval-seconds` (default 30s) once connected peers reach `--Xv5-minimum-peer-ratio` of `--max-peers`, instead of stopping peer search entirely. Below that ratio it runs at `--Xv5-fast-discovery-interval-seconds` (default 1s). [#11344](https://github.com/besu-eth/besu/pull/11344)
 - Backward sync no longer retries a block every few milliseconds when its parent world state is unavailable. The forward sync step swallowed the error meant to stop backward sync, so the same block was fetched, validated and logged in a tight loop. The `Backward sync halted` warning is now also logged only once per block. [#11303](https://github.com/besu-eth/besu/pull/11303)
@@ -33,6 +35,7 @@
 - Every method advertised by `engine_exchangeCapabilities` is now registered: on networks without Amsterdam the Amsterdam engine methods answer `-38005 Unsupported fork` where a fork check applies, instead of `-32604 Method not enabled`, and `engine_getBlobsV4` is served from Osaka on. [#11425](https://github.com/besu-eth/besu/pull/11425)
 - The transaction pool is no longer disabled, leaving built blocks empty and `engine_getBlobs` returning null, when peers on a different chain report a higher head than the one the consensus client is driving. [#11424](https://github.com/besu-eth/besu/pull/11424)
 - `trace_callMany` now answers a bundle with an invalid call with a JSON-RPC error. Previously it returned the complete error response (`{"jsonrpc":"2.0","id":1,"error":{...}}`) as the `result` of a successful response. An unavailable world state now returns `World state unavailable` instead of a `null` result. [#11401](https://github.com/besu-eth/besu/pull/11401)
+- `txpool_besuPendingTransactions`: the `gasPrice` filter no longer fails on EIP-1559 transactions, and a negative `limit` is rejected as an invalid parameter. [#11374](https://github.com/besu-eth/besu/pull/11374)
 
 ### Additions and Improvements
 - Update `Bouncycastle` to 1.85 to address CVEs `CVE-2026-8763` and `CVE-2026-13506`. [#11336](https://github.com/besu-eth/besu/pull/11336)
