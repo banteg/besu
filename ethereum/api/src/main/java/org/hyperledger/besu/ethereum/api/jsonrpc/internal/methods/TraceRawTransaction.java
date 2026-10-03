@@ -22,7 +22,6 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.exception.InvalidJsonR
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.JsonRpcParameter.JsonRpcParameterException;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.TraceTypeParameter;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.TransactionTrace;
-import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcError;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
@@ -114,11 +113,6 @@ public class TraceRawTransaction extends AbstractTraceByBlock implements JsonRpc
             (mutableWorldState, transactionSimulatorResult) ->
                 transactionSimulatorResult.map(
                     result -> {
-                      if (result.isInvalid()) {
-                        return new JsonRpcErrorResponse(
-                            requestContext.getRequest().getId(),
-                            JsonRpcError.from(result.getValidationResult()));
-                      }
                       final TransactionTrace transactionTrace =
                           new TransactionTrace(
                               result.transaction(), result.result(), tracer.getTraceFrames());
