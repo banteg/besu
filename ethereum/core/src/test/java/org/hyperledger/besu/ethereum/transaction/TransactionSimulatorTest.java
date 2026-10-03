@@ -1082,6 +1082,109 @@ public class TransactionSimulatorTest extends TrustedSetupClassLoaderExtension {
     assertThat(result.get().transaction().getType()).isEqualTo(TransactionType.DELEGATE_CODE);
   }
 
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("feeFieldCases")
+  public void shouldTypeAndPriceCallFromItsFeeFields(
+      final String description,
+      final CallParameter callParameter,
+      final Optional<Wei> baseFee,
+      final TransactionValidationParams validationParams,
+      final Optional<BigInteger> scheduleChainId,
+      final TransactionType expectedType,
+      final Optional<Wei> expectedMaxFeePerGas) {
+    final BlockHeaderTestFixture header =
+        new BlockHeaderTestFixture().number(1L).gasLimit(DEFAULT_BLOCK_GAS_LIMIT);
+    baseFee.ifPresent(header::baseFeePerGas);
+    final BlockHeader blockHeader = header.buildHeader();
+    mockBlockchainAndWorldState(callParameter, blockHeader);
+    mockProtocolSpecForProcessWithWorldUpdater();
+    when(protocolSchedule.getChainId()).thenReturn(scheduleChainId);
+    when(transactionProcessor.processTransaction(
+            any(), any(), any(), any(), any(), any(), any(), any(Wei.class), any()))
+        .thenReturn(mock(TransactionProcessingResult.class));
+
+    assertThat(
+            uncappedTransactionSimulator.process(callParameter, validationParams, NO_TRACING, 1L))
+        .isPresent();
+
+    final ArgumentCaptor<Transaction> transaction = ArgumentCaptor.forClass(Transaction.class);
+    verify(transactionProcessor)
+        .processTransaction(
+            any(), any(), transaction.capture(), any(), any(), any(), any(), any(Wei.class), any());
+    assertThat(transaction.getValue().getType()).as(description).isEqualTo(expectedType);
+    assertThat(transaction.getValue().getMaxFeePerGas())
+        .as(description)
+        .isEqualTo(expectedMaxFeePerGas);
+    assertThat(transaction.getValue().getMaxPriorityFeePerGas())
+        .as(description)
+        .isEqualTo(expectedMaxFeePerGas);
+  }
+
+  private static Stream<Arguments> feeFieldCases() {
+    final CodeDelegation delegation =
+        new CodeDelegation(BigInteger.ONE, Address.fromHexString("0x1"), 42L, FAKE_SIGNATURE);
+    final Wei price = Wei.of(7);
+    final TransactionValidationParams priced =
+        TransactionValidationParams.transactionSimulatorAllowFutureNonce();
+    final TransactionValidationParams callerPriced =
+        ImmutableTransactionValidationParams.builder()
+            .from(priced)
+            .isPreserveCallerGasPricing(true)
+            .build();
+    final Optional<BigInteger> chainId = Optional.of(BigInteger.ONE);
+    final CallParameter authorizationCall =
+        legacyTransactionCallParameterBuilder()
+            .gasPrice(price)
+            .codeDelegationAuthorizations(List.of(delegation))
+            .build();
+    final CallParameter dynamicFeeCall =
+        eip1559TransactionCallParameterBuilder()
+            .maxFeePerGas(price)
+            .maxPriorityFeePerGas(price)
+            .build();
+    return Stream.of(
+        Arguments.of(
+            "gasPrice with authorizations serves as both caps",
+            authorizationCall,
+            Optional.of(Wei.ONE),
+            priced,
+            chainId,
+            TransactionType.DELEGATE_CODE,
+            Optional.of(price)),
+        Arguments.of(
+            "gasPrice with authorizations serves as both caps at the caller's pricing",
+            authorizationCall,
+            Optional.of(Wei.ONE),
+            callerPriced,
+            chainId,
+            TransactionType.DELEGATE_CODE,
+            Optional.of(price)),
+        Arguments.of(
+            "dynamic fees before London stay dynamic",
+            dynamicFeeCall,
+            Optional.empty(),
+            priced,
+            chainId,
+            TransactionType.EIP1559,
+            Optional.of(price)),
+        Arguments.of(
+            "dynamic fees stay dynamic without a schedule chain id",
+            dynamicFeeCall,
+            Optional.empty(),
+            priced,
+            Optional.empty(),
+            TransactionType.EIP1559,
+            Optional.of(price)),
+        Arguments.of(
+            "gasPrice before London stays legacy",
+            legacyTransactionCallParameterBuilder().gasPrice(price).build(),
+            Optional.empty(),
+            priced,
+            chainId,
+            TransactionType.FRONTIER,
+            Optional.empty()));
+  }
+
   private BlockHeader mockBlockchainAndWorldState(final CallParameter callParameter) {
     final BlockHeader blockHeader =
         mockBlockHeader(Hash.ZERO, 1L, Wei.ONE, DEFAULT_BLOCK_GAS_LIMIT);

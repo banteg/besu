@@ -114,6 +114,9 @@ public class TraceCallMany extends TraceCall implements JsonRpcMethod {
       return new JsonRpcErrorResponse(
           requestContext.getRequest().getId(), RpcErrorType.INVALID_TRACE_CALL_MANY_PARAMS);
     }
+    Arrays.stream(transactionsAndTraceTypeParameters)
+        .map(param -> param.getTuple().getCallParameter())
+        .forEach(CallParameterUtil::rejectMixedFeeFields);
 
     final Optional<BlockHeader> maybeBlockHeader =
         blockchainQueriesSupplier.get().getBlockHeaderByNumber(blockNumber);

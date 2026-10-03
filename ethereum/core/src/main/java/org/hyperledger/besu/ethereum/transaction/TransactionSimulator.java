@@ -601,8 +601,13 @@ public class TransactionSimulator {
       // eth_simulateV1: use caller-provided gas pricing so fees are charged from sender's balance,
       // producing the correct stateRoot and block hash.
       gasPrice = callParams.getGasPrice().orElse(Wei.ZERO);
-      maxFeePerGas = callParams.getMaxFeePerGas().orElse(Wei.ZERO);
-      maxPriorityFeePerGas = callParams.getMaxPriorityFeePerGas().orElse(Wei.ZERO);
+      // a gasPrice alone serves as both caps of a blob or code delegation transaction
+      final Wei feeCapDefault =
+          callParams.getMaxFeePerGas().isEmpty() && callParams.getMaxPriorityFeePerGas().isEmpty()
+              ? gasPrice
+              : Wei.ZERO;
+      maxFeePerGas = callParams.getMaxFeePerGas().orElse(feeCapDefault);
+      maxPriorityFeePerGas = callParams.getMaxPriorityFeePerGas().orElse(feeCapDefault);
       maxFeePerBlobGas = callParams.getMaxFeePerBlobGas().orElse(Wei.ZERO);
     } else if (transactionValidationParams.isAllowExceedingBalance()) {
       // eth_call: zero gas prices so callers don't need sufficient balance for gas.
@@ -699,30 +704,23 @@ public class TransactionSimulator {
       final ProcessableBlockHeader header,
       final boolean noGasPriceParametersPresent) {
 
-    // Return false if chain ID is not present
-    if (protocolSchedule.getChainId().isEmpty()) {
-      return false;
-    }
-
-    // Return false if base fee is not present
-    if (header.getBaseFee().isEmpty()) {
-      return false;
-    }
-
-    // Return true if blob gas price should be set
-    if (shouldSetBlobGasPrice(callParams)) {
+    // blob and code delegation transactions carry dynamic fees, so a gasPrice serves as both caps
+    if (shouldSetBlobGasPrice(callParams)
+        || !callParams.getCodeDelegationAuthorizations().isEmpty()) {
       return true;
     }
 
-    // Return true if all gas price parameters are empty
-    if (noGasPriceParametersPresent) {
+    // dynamic fees make an EIP-1559 transaction, which a fork without a base fee rejects, rather
+    // than being dropped
+    if (callParams.getMaxPriorityFeePerGas().isPresent()
+        || callParams.getMaxFeePerGas().isPresent()) {
       return true;
     }
 
-    // Return true if either maxPriorityFeePerGas or maxFeePerGas is present.
-    // This ensures the transaction is considered EIP-1559 only if these parameters are present
-    return callParams.getMaxPriorityFeePerGas().isPresent()
-        || callParams.getMaxFeePerGas().isPresent();
+    // a call without fees defaults to EIP-1559 only where the chain and block support it
+    return noGasPriceParametersPresent
+        && protocolSchedule.getChainId().isPresent()
+        && header.getBaseFee().isPresent();
   }
 
   private boolean noGasPriceParametersPresent(final CallParameter callParams) {
