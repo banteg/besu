@@ -1,0 +1,21 @@
+{
+  "comment": "A signed legacy transaction for chain 1 fails validation on chain 1982 and is rejected with that error, not traced",
+  "request": {
+    "jsonrpc": "2.0",
+    "method": "trace_rawTransaction",
+    "params": [
+      "0xf85f8081ef825208940000000000000000000000000000000000000999808026a05fb95ee1ff3a8402d86896a686669fc6437eee2025b3eb6367c92d199932d9ed9f80c60d539363844210d0c60b2e2025864efc8e1c18dce2714c4985eae5e452",
+      []
+    ],
+    "id": 1
+  },
+  "response": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32000,
+      "message": "Wrong chainId (transaction was meant for chain id 1 and not this chain id 1982)"
+    }
+  },
+  "statusCode": 200
+}
